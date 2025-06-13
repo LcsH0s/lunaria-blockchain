@@ -30,4 +30,9 @@ pub enum BlockError {
     EncodeError(#[from] bincode::error::EncodeError),
     #[error("DecodeError: {0}")]
     DecodeError(#[from] bincode::error::DecodeError),
+
+    #[error("InvalidNonce: {0}")]
+    InvalidNonce(u64),
+    #[error("NonceTooHard")]
+    NonceTooHard,
 }

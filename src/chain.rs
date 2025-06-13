@@ -1,7 +1,4 @@
-use crate::{
-    block::{Block, GENESIS_INDEX},
-    error::ChainError,
-};
+use crate::{block::Block, error::ChainError};
 
 use bincode::{Decode, Encode, config};
 use std::fmt;
@@ -13,10 +10,12 @@ pub struct Chain {
 }
 
 impl Chain {
-    pub fn new() -> Self {
-        Chain {
-            chain: vec![Block::genesis()],
-        }
+    pub fn new() -> Result<Self, ChainError> {
+        let genesis = Block::genesis()?;
+
+        Ok(Chain {
+            chain: vec![genesis],
+        })
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, ChainError> {
@@ -28,7 +27,7 @@ impl Chain {
     pub fn verify(&self) -> Result<(), ChainError> {
         let genesis_block = self.chain.first().ok_or(ChainError::BlockNotFound(0))?;
 
-        if genesis_block.index() != GENESIS_INDEX {
+        if genesis_block.index() != 0 {
             return Err(ChainError::GenesisBlockError(genesis_block.clone()));
         }
 
@@ -45,19 +44,23 @@ impl Chain {
         Ok(())
     }
 
-    pub fn forge(&self, data: Vec<u8>) -> Result<Block, ChainError> {
+    pub fn forge<D>(&self, data: D) -> Result<Block, ChainError>
+    where
+        D: AsRef<[u8]> + Send + Sync,
+    {
         let last_block = self.last()?;
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_millis();
 
-        Ok(Block::new(
+        Block::forge(
             last_block.index() + 1,
             timestamp,
             last_block.hash().clone(),
             data,
-        ))
+        )
+        .map_err(ChainError::from)
     }
 
     pub fn append(&mut self, block: Block) -> Result<(), ChainError> {

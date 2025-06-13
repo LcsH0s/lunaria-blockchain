@@ -1,10 +1,14 @@
 use crate::error::BlockError;
-use crate::hash::Hash;
-use bincode::{Decode, Encode, config};
-use sha3::{Digest, Sha3_256, digest::FixedOutput};
-use std::fmt;
+use crate::hash::{BlockHasher, Hash};
 
-pub const GENESIS_INDEX: u64 = 0;
+use bincode::{Decode, Encode, config};
+use rayon::prelude::*;
+use sha3::{Digest, Sha3_256, digest::FixedOutput};
+
+use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+pub const DIFFICULTY: usize = 8;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq)]
 pub struct Block {
@@ -13,26 +17,57 @@ pub struct Block {
     hash: Hash,
     previous_hash: Hash,
     data: Vec<u8>,
+    nonce: u64,
 }
 
 impl Block {
-    pub fn new(index: u64, timestamp: u128, previous_hash: Hash, data: Vec<u8>) -> Self {
-        let mut hasher = Sha3_256::new();
+    pub fn forge<D: AsRef<[u8]> + Send + Sync>(
+        index: u64,
+        timestamp: u128,
+        previous_hash: Hash,
+        data: D,
+    ) -> Result<Self, BlockError> {
+        Self::forge_with_difficulty(index, timestamp, previous_hash, data, DIFFICULTY)
+    }
 
-        hasher.update(index.to_ne_bytes());
-        hasher.update(timestamp.to_ne_bytes());
-        hasher.update(previous_hash);
-        hasher.update(&data);
+    fn forge_with_difficulty<D: AsRef<[u8]> + Send + Sync>(
+        index: u64,
+        timestamp: u128,
+        previous_hash: Hash,
+        data: D,
+        difficulty: usize,
+    ) -> Result<Self, BlockError> {
+        let base_hasher = BlockHasher::new(index, timestamp, previous_hash, data.as_ref());
+        let found = AtomicBool::new(false);
 
-        let hash: Hash = hasher.finalize_fixed().into();
+        let max_attempts = 1_000_000_000u64;
 
-        Block {
+        let result = (0..max_attempts).into_par_iter().find_map_first(|nonce| {
+            if found.load(Ordering::Acquire) {
+                return None;
+            }
+
+            let mut hasher = base_hasher.clone();
+            let hash = hasher.hash_nonce(nonce);
+
+            if hash.difficulty() >= difficulty {
+                found.store(true, Ordering::Relaxed);
+                Some((nonce, hash))
+            } else {
+                None
+            }
+        });
+
+        let (nonce, hash) = result.ok_or(BlockError::NonceTooHard)?;
+
+        Ok(Block {
             index,
             timestamp,
-            hash,
             previous_hash,
-            data,
-        }
+            data: data.as_ref().to_vec(),
+            nonce,
+            hash,
+        })
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, BlockError> {
@@ -41,8 +76,8 @@ impl Block {
         Ok(decoded)
     }
 
-    pub fn genesis() -> Self {
-        Self::new(0, 0, Hash::from([0u8; 32]), Vec::new())
+    pub fn genesis() -> Result<Self, BlockError> {
+        Self::forge_with_difficulty(0, 0, Hash::from([0u8; 32]), Vec::new(), DIFFICULTY)
     }
 
     pub fn verify(&self, prev: &Block) -> Result<(), BlockError> {
@@ -107,13 +142,15 @@ impl fmt::Display for Block {
              Hash          : {}\n\
              Previous Hash : {}\n\
              Data          : {} bytes\n\
-             Data (hex)    : {}",
+             Data (hex)    : {}\n\
+             Nonce         : {}",
             self.index,
             self.timestamp,
             self.hash,
             self.previous_hash,
             self.data.len(),
-            hex::encode(&self.data)
+            hex::encode(&self.data),
+            self.nonce
         )
     }
 }

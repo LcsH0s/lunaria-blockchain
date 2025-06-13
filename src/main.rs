@@ -10,9 +10,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     chain.verify()?;
     println!("Chain:\n{chain}");
 
-    let new_block = Block::new(2, 1, Hash::from([0u8; 32]), Vec::new());
-    chain.append(new_block)?;
+    // let new_block = Block::new(2, 1, Hash::from([0u8; 32]), Vec::new());
+    // chain.append(new_block)?;
 
-    fs::write(TEST_CHAIN_FILE, chain.encode()?)?;
+    // fs::write(TEST_CHAIN_FILE, chain.encode()?)?;
+
+    let new_block = chain.forge(Vec::from([3u8; 32]))?;
+    println!("{new_block}");
+
     Ok(())
 }
