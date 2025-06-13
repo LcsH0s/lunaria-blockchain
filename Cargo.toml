@@ -1,0 +1,12 @@
+[package]
+name = "lunaria"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bincode = "2.0.1"
+hex = "0.4.3"
+hex-literal = "1.0.0"
+sha3 = "0.10.8"
+thiserror = "2.0.12"
+typenum = "1.18.0"
