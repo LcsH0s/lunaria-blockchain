@@ -190,3 +190,11 @@
 
   * Property‑based tests with `proptest`
   * Fuzzing transaction parsing
+
+## 🔄 Transaction Lifecycle
+
+1. Client signs and sends a `Transaction` to the cluster
+2. Leader receives it and includes it in a PoH block (slot)
+3. Validators replay the block and **execute each instruction** in order
+4. State changes are committed
+5. Rewards and fees are calculated post-block

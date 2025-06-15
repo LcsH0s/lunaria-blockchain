@@ -5,15 +5,15 @@ use std::fmt;
 use std::time::SystemTime;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq)]
-pub struct Chain {
+pub struct Ledger {
     chain: Vec<Block>,
 }
 
-impl Chain {
+impl Ledger {
     pub fn new() -> Result<Self, ChainError> {
         let genesis = Block::genesis()?;
 
-        Ok(Chain {
+        Ok(Ledger {
             chain: vec![genesis],
         })
     }
@@ -84,7 +84,7 @@ impl Chain {
     }
 }
 
-impl fmt::Display for Chain {
+impl fmt::Display for Ledger {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Blockchain - Total Blocks: {}", self.chain.len())?;
         for (i, block) in self.chain.iter().enumerate() {

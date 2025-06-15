@@ -1,5 +1,5 @@
-use crate::error::BlockError;
-use crate::hash::{BlockHasher, Hash};
+use super::error::BlockError;
+use super::hash::{BlockHash, BlockHasher};
 
 use bincode::{Decode, Encode, config};
 use rayon::prelude::*;
@@ -14,8 +14,8 @@ pub const DIFFICULTY: usize = 8;
 pub struct Block {
     index: u64,
     timestamp: u128,
-    hash: Hash,
-    previous_hash: Hash,
+    hash: BlockHash,
+    previous_hash: BlockHash,
     data: Vec<u8>,
     nonce: u64,
 }
@@ -24,7 +24,7 @@ impl Block {
     pub fn forge<D: AsRef<[u8]> + Send + Sync>(
         index: u64,
         timestamp: u128,
-        previous_hash: Hash,
+        previous_hash: BlockHash,
         data: D,
     ) -> Result<Self, BlockError> {
         Self::forge_with_difficulty(index, timestamp, previous_hash, data, DIFFICULTY)
@@ -33,7 +33,7 @@ impl Block {
     fn forge_with_difficulty<D: AsRef<[u8]> + Send + Sync>(
         index: u64,
         timestamp: u128,
-        previous_hash: Hash,
+        previous_hash: BlockHash,
         data: D,
         difficulty: usize,
     ) -> Result<Self, BlockError> {
@@ -77,7 +77,7 @@ impl Block {
     }
 
     pub fn genesis() -> Result<Self, BlockError> {
-        Self::forge_with_difficulty(0, 0, Hash::from([0u8; 32]), Vec::new(), DIFFICULTY)
+        Self::forge_with_difficulty(0, 0, BlockHash::from([0u8; 32]), Vec::new(), DIFFICULTY)
     }
 
     pub fn verify(&self, prev: &Block) -> Result<(), BlockError> {
@@ -101,12 +101,12 @@ impl Block {
     pub fn verify_hash(&self) -> Result<(), BlockError> {
         let mut hasher = Sha3_256::new();
 
-        hasher.update(self.index.to_ne_bytes());
-        hasher.update(self.timestamp.to_ne_bytes());
+        hasher.update(self.index.to_le_bytes());
+        hasher.update(self.timestamp.to_le_bytes());
         hasher.update(&self.previous_hash);
         hasher.update(&self.data);
 
-        let computed: Hash = hasher.finalize_fixed().into();
+        let computed: BlockHash = hasher.finalize_fixed().into();
         let current = self.hash();
 
         if *current != computed {
@@ -124,7 +124,7 @@ impl Block {
         bincode::encode_to_vec(&self, config).map_err(BlockError::from)
     }
 
-    pub fn hash(&self) -> &Hash {
+    pub fn hash(&self) -> &BlockHash {
         &self.hash
     }
 

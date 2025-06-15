@@ -5,23 +5,23 @@ use std::fmt;
 use typenum::U32;
 
 #[derive(PartialEq, Clone, Copy, Debug, Encode, Decode)]
-pub struct Hash([u8; 32]);
+pub struct BlockHash([u8; 32]);
 
-impl Hash {
+impl BlockHash {
     pub fn new<D: AsRef<[u8]>>(
         index: u64,
         timestamp: u128,
-        previous_hash: Hash,
+        previous_hash: BlockHash,
         data: D,
         nonce: u64,
     ) -> Self {
         let mut hasher = Sha3_256::new();
 
-        hasher.update(index.to_ne_bytes());
-        hasher.update(timestamp.to_ne_bytes());
+        hasher.update(index.to_le_bytes());
+        hasher.update(timestamp.to_le_bytes());
         hasher.update(previous_hash);
         hasher.update(data);
-        hasher.update(nonce.to_ne_bytes());
+        hasher.update(nonce.to_le_bytes());
 
         hasher.finalize_fixed().into()
     }
@@ -40,7 +40,7 @@ impl Hash {
     }
 }
 
-impl std::fmt::Display for Hash {
+impl std::fmt::Display for BlockHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for byte in &self.0 {
             write!(f, "{:02x}", byte)?;
@@ -49,19 +49,19 @@ impl std::fmt::Display for Hash {
     }
 }
 
-impl From<GenericArray<u8, U32>> for Hash {
+impl From<GenericArray<u8, U32>> for BlockHash {
     fn from(array: GenericArray<u8, U32>) -> Self {
-        Hash(array.into())
+        BlockHash(array.into())
     }
 }
 
-impl From<[u8; 32]> for Hash {
+impl From<[u8; 32]> for BlockHash {
     fn from(array: [u8; 32]) -> Self {
-        Hash(array)
+        BlockHash(array)
     }
 }
 
-impl AsRef<[u8]> for Hash {
+impl AsRef<[u8]> for BlockHash {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
@@ -73,7 +73,12 @@ pub struct BlockHasher {
 }
 
 impl BlockHasher {
-    pub fn new<D: AsRef<[u8]>>(index: u64, timestamp: u128, previous_hash: Hash, data: D) -> Self {
+    pub fn new<D: AsRef<[u8]>>(
+        index: u64,
+        timestamp: u128,
+        previous_hash: BlockHash,
+        data: D,
+    ) -> Self {
         let mut hasher = Sha3_256::new();
         hasher.update(index.to_be_bytes());
         hasher.update(timestamp.to_be_bytes());
@@ -82,9 +87,9 @@ impl BlockHasher {
         BlockHasher { state: hasher }
     }
 
-    pub fn hash_nonce(&mut self, nonce: u64) -> Hash {
+    pub fn hash_nonce(&mut self, nonce: u64) -> BlockHash {
         self.state.update(nonce.to_be_bytes());
         let bytes = self.state.finalize_reset();
-        Hash(bytes.into())
+        BlockHash(bytes.into())
     }
 }
