@@ -1,6 +1,6 @@
 use bincode::{Decode, Encode};
 use sha3::digest::generic_array::GenericArray;
-use sha3::{Digest, Sha3_256, digest::FixedOutput};
+use sha3::{Digest, Sha3_256};
 use std::fmt;
 use typenum::U32;
 
@@ -8,24 +8,6 @@ use typenum::U32;
 pub struct BlockHash([u8; 32]);
 
 impl BlockHash {
-    pub fn new<D: AsRef<[u8]>>(
-        index: u64,
-        timestamp: u128,
-        previous_hash: BlockHash,
-        data: D,
-        nonce: u64,
-    ) -> Self {
-        let mut hasher = Sha3_256::new();
-
-        hasher.update(index.to_le_bytes());
-        hasher.update(timestamp.to_le_bytes());
-        hasher.update(previous_hash);
-        hasher.update(data);
-        hasher.update(nonce.to_le_bytes());
-
-        hasher.finalize_fixed().into()
-    }
-
     pub fn difficulty(&self) -> usize {
         let mut count = 0;
         for byte in self.0.iter() {
@@ -73,17 +55,18 @@ pub struct BlockHasher {
 }
 
 impl BlockHasher {
-    pub fn new<D: AsRef<[u8]>>(
+    pub fn new(
         index: u64,
         timestamp: u128,
         previous_hash: BlockHash,
-        data: D,
+        encoded_transactions: Vec<u8>,
     ) -> Self {
         let mut hasher = Sha3_256::new();
         hasher.update(index.to_be_bytes());
         hasher.update(timestamp.to_be_bytes());
         hasher.update(previous_hash.0);
-        hasher.update(data.as_ref());
+        hasher.update(encoded_transactions);
+
         BlockHasher { state: hasher }
     }
 

@@ -1,12 +1,14 @@
 use super::error::BlockError;
 use super::hash::{BlockHash, BlockHasher};
+use crate::account::Address;
+use crate::transaction::{Transaction, TransactionType};
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::{fmt, u64};
 
 use bincode::{Decode, Encode, config};
 use rayon::prelude::*;
 use sha3::{Digest, Sha3_256, digest::FixedOutput};
-
-use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const DIFFICULTY: usize = 8;
 
@@ -16,28 +18,31 @@ pub struct Block {
     timestamp: u128,
     hash: BlockHash,
     previous_hash: BlockHash,
-    data: Vec<u8>,
+    transactions: Vec<Transaction>,
     nonce: u64,
 }
 
 impl Block {
-    pub fn forge<D: AsRef<[u8]> + Send + Sync>(
+    pub fn forge(
         index: u64,
         timestamp: u128,
         previous_hash: BlockHash,
-        data: D,
+        transactions: Vec<Transaction>,
     ) -> Result<Self, BlockError> {
-        Self::forge_with_difficulty(index, timestamp, previous_hash, data, DIFFICULTY)
+        Self::forge_with_difficulty(index, timestamp, previous_hash, transactions, DIFFICULTY)
     }
 
-    fn forge_with_difficulty<D: AsRef<[u8]> + Send + Sync>(
+    fn forge_with_difficulty(
         index: u64,
         timestamp: u128,
         previous_hash: BlockHash,
-        data: D,
+        transactions: Vec<Transaction>,
         difficulty: usize,
     ) -> Result<Self, BlockError> {
-        let base_hasher = BlockHasher::new(index, timestamp, previous_hash, data.as_ref());
+        let encoded_transactions =
+            bincode::encode_to_vec(&transactions, bincode::config::standard())
+                .map_err(BlockError::TransactionEncodeError)?;
+        let base_hasher = BlockHasher::new(index, timestamp, previous_hash, encoded_transactions);
         let found = AtomicBool::new(false);
 
         let max_attempts = 1_000_000_000u64;
@@ -64,7 +69,7 @@ impl Block {
             index,
             timestamp,
             previous_hash,
-            data: data.as_ref().to_vec(),
+            transactions,
             nonce,
             hash,
         })
@@ -77,25 +82,23 @@ impl Block {
     }
 
     pub fn genesis() -> Result<Self, BlockError> {
-        Self::forge_with_difficulty(0, 0, BlockHash::from([0u8; 32]), Vec::new(), DIFFICULTY)
-    }
+        let genesis_transactions = vec![Transaction {
+            tx_type: TransactionType::Mint,
+            from_address: Address::from([0u8; 32]),
+            from_public_key: [0u8; 897],
+            signature: [0u8; 752],
+            to_address: Address::try_from("9JEuZSy4CmRM8wMiE368Bx5jkgK5SLH1KvRDiUcNRjsV")
+                .map_err(BlockError::GenesisTransactionError)?,
+            amount: u64::MAX / 2,
+        }];
 
-    pub fn verify(&self, prev: &Block) -> Result<(), BlockError> {
-        if self.index() != prev.index() + 1 {
-            return Err(BlockError::InvalidIndex {
-                got: self.index(),
-                want: prev.index() + 1,
-            });
-        }
-
-        if self.previous_hash != *prev.hash() {
-            return Err(BlockError::InvalidPreviousHash {
-                got: self.previous_hash.clone(),
-                want: prev.hash().clone(),
-            });
-        }
-
-        self.verify_hash()
+        Self::forge_with_difficulty(
+            0,
+            0,
+            BlockHash::from([0u8; 32]),
+            genesis_transactions,
+            DIFFICULTY,
+        )
     }
 
     pub fn verify_hash(&self) -> Result<(), BlockError> {
@@ -104,7 +107,12 @@ impl Block {
         hasher.update(self.index.to_le_bytes());
         hasher.update(self.timestamp.to_le_bytes());
         hasher.update(&self.previous_hash);
-        hasher.update(&self.data);
+
+        let encoded_transactions =
+            bincode::encode_to_vec(&self.transactions, bincode::config::standard())
+                .map_err(BlockError::TransactionEncodeError)?;
+
+        hasher.update(&encoded_transactions);
 
         let computed: BlockHash = hasher.finalize_fixed().into();
         let current = self.hash();
@@ -131,26 +139,30 @@ impl Block {
     pub fn index(&self) -> u64 {
         self.index
     }
+
+    pub fn transactions(&self) -> &[Transaction] {
+        &self.transactions
+    }
 }
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let transactions_str = self
+            .transactions
+            .iter()
+            .map(|tx| format!("{}", tx))
+            .collect::<Vec<_>>()
+            .join("\n    ");
+
         write!(
             f,
             "Block #{}\n\
-             Timestamp     : {}\n\
-             Hash          : {}\n\
-             Previous Hash : {}\n\
-             Data          : {} bytes\n\
-             Data (hex)    : {}\n\
-             Nonce         : {}",
-            self.index,
-            self.timestamp,
-            self.hash,
-            self.previous_hash,
-            self.data.len(),
-            hex::encode(&self.data),
-            self.nonce
+             Timestamp      : {}\n\
+             Hash           : {}\n\
+             Previous Hash  : {}\n\
+             Transactions   : [\n    {}\n]\n\
+             Nonce          : {}",
+            self.index, self.timestamp, self.hash, self.previous_hash, transactions_str, self.nonce
         )
     }
 }

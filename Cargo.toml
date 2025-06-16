@@ -3,12 +3,32 @@ name = "lunaria"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "lunaria"
+path = "src/lib.rs"
+
+[[bin]]
+name = "client"
+path = "src/bin/client.rs"
+
+[[bin]]
+name = "validator"
+path = "src/bin/validator.rs"
+
 [dependencies]
 base58 = "0.2.0"
 bincode = "2.0.1"
+clap = { version = "4.5.40", features = ["derive"] }
 hex = "0.4.3"
+log = "0.4.27"
 pqcrypto = { version = "0.18.1", features = ["serialization"] }
+prost = "0.14.0"
 rayon = "1.10.0"
 sha3 = "0.10.8"
 thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["full"] }
+tonic = "0.13.1"
 typenum = "1.18.0"
+
+[build-dependencies]
+tonic-build = "*"

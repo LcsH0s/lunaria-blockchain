@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::account::AddressParseError;
+
 use super::hash::BlockHash;
 
 #[derive(Error, Debug)]
@@ -15,6 +17,11 @@ pub enum BlockError {
     EncodeError(#[from] bincode::error::EncodeError),
     #[error("DecodeError: {0}")]
     DecodeError(#[from] bincode::error::DecodeError),
+    #[error("TransactionEncodeError: {0}")]
+    TransactionEncodeError(bincode::error::EncodeError),
+
+    #[error("GenesisTransactionError: {0}")]
+    GenesisTransactionError(#[from] AddressParseError),
 
     #[error("InvalidNonce: {0}")]
     InvalidNonce(u64),

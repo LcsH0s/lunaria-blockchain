@@ -1,2 +1,5 @@
+mod error;
 mod transaction;
-mod util;
+
+pub use error::TransactionError;
+pub use transaction::{Transaction, TransactionType, sign, verify_signature};
