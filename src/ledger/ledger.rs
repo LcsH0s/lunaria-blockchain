@@ -40,6 +40,10 @@ impl Ledger {
         Ok(())
     }
 
+    pub fn balance(&self, address: Address) -> u64 {
+        self.state.get(&address).copied().unwrap_or(0)
+    }
+
     pub fn state(&self) -> HashMap<Address, u64> {
         self.state.clone()
     }

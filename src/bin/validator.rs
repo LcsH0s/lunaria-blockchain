@@ -1,40 +1,55 @@
 // use std::fs;
 use tonic::{Request, Response, Status, transport::Server};
 
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
+use lunaria::{account::Address, ledger::Ledger};
 
-pub mod hello_world {
-    tonic::include_proto!("validator"); // The string specified here must match the proto package name
+use validator::validator_server::{Validator, ValidatorServer};
+use validator::{BalanceReply, BalanceRequest};
+
+pub mod validator {
+    tonic::include_proto!("validator");
 }
 
-#[derive(Debug, Default)]
-pub struct MyGreeter {}
+#[derive(Debug)]
+pub struct MyValidator {
+    ledger: Ledger,
+}
 
 #[tonic::async_trait]
-impl Greeter for MyGreeter {
-    async fn say_hello(
+impl Validator for MyValidator {
+    async fn get_balance(
         &self,
-        request: Request<HelloRequest>, // Accept request of type HelloRequest
-    ) -> Result<Response<HelloReply>, Status> {
-        // Return an instance of type HelloReply
+        request: Request<BalanceRequest>,
+    ) -> Result<Response<BalanceReply>, Status> {
         println!("Got a request: {:?}", request);
 
-        let reply = HelloReply {
-            message: format!("Hello {}!", request.into_inner().name), // We must use .into_inner() as the fields of gRPC requests and responses are private
+        let request_message = request.get_ref().clone();
+        let balance = match Address::try_from(request_message.address.as_str()) {
+            Ok(address) => self.ledger.balance(address),
+            Err(e) => {
+                eprintln!("invalid address");
+                return Err(Status::internal(format!("invalid address: {e:?}")));
+            }
         };
 
-        Ok(Response::new(reply)) // Send back our formatted greeting
+        let reply = BalanceReply {
+            address: request_message.address,
+            balance,
+        };
+
+        Ok(Response::new(reply))
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse()?;
-    let greeter = MyGreeter::default();
+
+    let ledger = Ledger::new()?;
+    let validator = MyValidator { ledger };
 
     Server::builder()
-        .add_service(GreeterServer::new(greeter))
+        .add_service(ValidatorServer::new(validator))
         .serve(addr)
         .await?;
 
